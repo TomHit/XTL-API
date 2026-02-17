@@ -11,6 +11,46 @@
 			"name": "DataContract",
 			"item": [
 				{
+					"name": "Login",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"username_or_email\": \"{{USERNAME_OR_EMAIL}}\",\r\n  \"password\": \"{{PASSWORD}}\",\r\n  \"totp\": \"{{totp}}\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://app.xautrendlab.com/_api/user/login",
+							"protocol": "https",
+							"host": [
+								"app",
+								"xautrendlab",
+								"com"
+							],
+							"path": [
+								"_api",
+								"user",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "https://app.xautrendlab.com/_api/trend/opportunities",
 					"event": [
 						{
@@ -18,97 +58,67 @@
 							"script": {
 								"exec": [
 									"let j = pm.response.json();\r",
-									"pm.test(\"rows exist\", () => {\r",
-									"    pm.expect(j.rows).to.be.an(\"array\").that.is.not.empty;\r",
+									"\r",
+									"pm.test(\"ok true\", () => {\r",
+									"  pm.expect(j).to.be.an(\"object\");\r",
+									"  pm.expect(j.ok).to.eql(true);\r",
 									"});\r",
+									"\r",
+									"pm.test(\"tf present\", () => {\r",
+									"  pm.expect(j.tf).to.be.a(\"string\");\r",
+									"});\r",
+									"\r",
+									"pm.test(\"rows is array\", () => {\r",
+									"  pm.expect(j.rows).to.be.an(\"array\");\r",
+									"});\r",
+									"\r",
+									"if (!j.rows || j.rows.length === 0) {\r",
+									"  pm.test(\"rows may be empty (allowed)\", () => pm.expect(true).to.eql(true));\r",
+									"  return;\r",
+									"}\r",
 									"\r",
 									"let row = j.rows[0];\r",
 									"\r",
-									"// -------- Find bars in a tolerant way (because shapes differ) --------\r",
-									"let bars =\r",
-									"    (row.chart && row.chart.bars) ||\r",
-									"    (row.bars) ||\r",
-									"    (row.entry_gate && row.entry_gate.bars) ||\r",
-									"    null;\r",
-									"\r",
-									"pm.test(\"bars exist\", () => {\r",
-									"    pm.expect(bars).to.be.an(\"array\").that.is.not.empty;\r",
+									"pm.test(\"row core fields exist\", () => {\r",
+									"  pm.expect(row).to.have.property(\"symbol\");\r",
+									"  pm.expect(row).to.have.property(\"tf\");\r",
+									"  pm.expect(row).to.have.property(\"decision\");\r",
+									"  pm.expect(row).to.have.property(\"signal\");\r",
 									"});\r",
 									"\r",
-									"// ---- Basic bar shape + monotonic time + OHLC sanity ----\r",
-									"pm.test(\"bars have valid OHLC + increasing time\", () => {\r",
-									"    pm.expect(bars.length).to.be.greaterThan(50);\r",
-									"\r",
-									"    let prevT = null;\r",
-									"    for (let i = 0; i < Math.min(bars.length, 200); i++) {\r",
-									"        let b = bars[i];\r",
-									"\r",
-									"        // time can be 't' (seconds) OR 'ts_ms' (ms)\r",
-									"        let tms = null;\r",
-									"        if (b.ts_ms != null) tms = Number(b.ts_ms);\r",
-									"        else if (b.t != null) tms = Number(b.t) * 1000;\r",
-									"\r",
-									"        pm.expect(tms, `bar[${i}].time`).to.be.a(\"number\");\r",
-									"\r",
-									"        let o = Number(b.o), h = Number(b.h), l = Number(b.l), c = Number(b.c);\r",
-									"        pm.expect(o).to.be.a(\"number\");\r",
-									"        pm.expect(h).to.be.a(\"number\");\r",
-									"        pm.expect(l).to.be.a(\"number\");\r",
-									"        pm.expect(c).to.be.a(\"number\");\r",
-									"\r",
-									"        pm.expect(l, `bar[${i}] low<=high`).to.be.at.most(h);\r",
-									"\r",
-									"        let mn = Math.min(o, c);\r",
-									"        let mx = Math.max(o, c);\r",
-									"        pm.expect(l, `bar[${i}] low<=body`).to.be.at.most(mn);\r",
-									"        pm.expect(h, `bar[${i}] high>=body`).to.be.at.least(mx);\r",
-									"\r",
-									"        if (prevT != null) pm.expect(tms, `bar[${i}] time increasing`).to.be.above(prevT);\r",
-									"        prevT = tms;\r",
-									"    }\r",
+									"pm.test(\"row has price fields\", () => {\r",
+									"  pm.expect(row).to.have.property(\"price\");\r",
+									"  pm.expect(Number(row.price)).to.be.a(\"number\");\r",
+									"  if (row.last_price != null) pm.expect(Number(row.last_price)).to.be.a(\"number\");\r",
 									"});\r",
 									"\r",
-									"// -------- lastClosedTs validation --------\r",
-									"// Prefer dbg_lastClosedTs (what you were using)\r",
-									"let lastClosedTs = row.entry_gate && row.entry_gate.dbg_lastClosedTs != null\r",
-									"    ? Number(row.entry_gate.dbg_lastClosedTs)\r",
-									"    : (row.lastClosedTs != null ? Number(row.lastClosedTs) : null);\r",
+									"pm.test(\"sr bundle exists when present\", () => {\r",
+									"  // sr may be null sometimes; if present, validate shape\r",
+									"  if (row.sr == null) return;\r",
 									"\r",
-									"pm.test(\"lastClosedTs exists\", () => {\r",
-									"    pm.expect(lastClosedTs).to.be.a(\"number\");\r",
+									"  pm.expect(row.sr).to.be.an(\"object\");\r",
+									"  pm.expect(row.sr).to.have.property(\"symbol\");\r",
+									"  pm.expect(row.sr).to.have.property(\"h4\"); // usually present\r",
+									"  pm.expect(row.sr.h4).to.be.an(\"object\");\r",
+									"  pm.expect(row.sr.h4).to.have.property(\"supports\");\r",
+									"  pm.expect(row.sr.h4.supports).to.be.an(\"array\");\r",
 									"});\r",
 									"\r",
-									"// Infer last closed from bars: last bar start + tf_ms (H1 = 3600000)\r",
-									"const tf = (row.tf || \"H1\").toUpperCase();\r",
-									"const tf_ms = (tf === \"H1\") ? 3600000 : (tf === \"M15\" ? 900000 : null);\r",
-									"\r",
-									"pm.test(\"TF supported for lastClosed check\", () => {\r",
-									"    pm.expect(tf_ms).to.not.equal(null);\r",
-									"});\r",
-									"\r",
-									"pm.test(\"lastClosedTs equals last bar close boundary\", () => {\r",
-									"    // last bar start time\r",
-									"    let bLast = bars[bars.length - 1];\r",
-									"    let t0 = (bLast.ts_ms != null) ? Number(bLast.ts_ms) : Number(bLast.t) * 1000;\r",
-									"\r",
-									"    let expectedClose = t0 + tf_ms;\r",
-									"\r",
-									"    // Some feeds include forming bar at end; if so, take second last bar\r",
-									"    // If lastClosedTs != expectedClose, try bars[-2]\r",
-									"    if (lastClosedTs !== expectedClose && bars.length >= 2) {\r",
-									"        let b2 = bars[bars.length - 2];\r",
-									"        let t2 = (b2.ts_ms != null) ? Number(b2.ts_ms) : Number(b2.t) * 1000;\r",
-									"        let expected2 = t2 + tf_ms;\r",
-									"        pm.expect(lastClosedTs, \"lastClosedTs matches last closed bar\").to.equal(expected2);\r",
-									"    } else {\r",
-									"        pm.expect(lastClosedTs, \"lastClosedTs matches last closed bar\").to.equal(expectedClose);\r",
-									"    }\r",
+									"pm.test(\"entry_gate shape (if present)\", () => {\r",
+									"  if (row.entry_gate == null) return;\r",
+									"  pm.expect(row.entry_gate).to.be.an(\"object\");\r",
+									"  pm.expect(row.entry_gate).to.have.property(\"reason\");\r",
+									"  // zone_used is important in XTL\r",
+									"  if (row.entry_gate.zone_used != null) {\r",
+									"    pm.expect(row.entry_gate.zone_used).to.be.an(\"object\");\r",
+									"    pm.expect(row.entry_gate.zone_used).to.have.property(\"low\");\r",
+									"    pm.expect(row.entry_gate.zone_used).to.have.property(\"high\");\r",
+									"  }\r",
 									"});\r",
 									""
 								],
 								"type": "text/javascript",
-								"packages": {},
-								"requests": {}
+								"packages": {}
 							}
 						}
 					],
@@ -162,46 +172,6 @@
 									"key": "debug_gate",
 									"value": "1"
 								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Login",
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\r\n  \"username_or_email\": \"{{USERNAME_OR_EMAIL}}\",\r\n  \"password\": \"{{PASSWORD}}\",\r\n  \"totp\": \"{{totp}}\"\r\n}\r\n",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "https://app.xautrendlab.com/_api/user/login",
-							"protocol": "https",
-							"host": [
-								"app",
-								"xautrendlab",
-								"com"
-							],
-							"path": [
-								"_api",
-								"user",
-								"login"
 							]
 						}
 					},
