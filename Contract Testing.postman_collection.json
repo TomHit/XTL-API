@@ -1,0 +1,208 @@
+{
+  "info": {
+    "_postman_id": "68d96d96-4e85-47a6-92f1-f52ffefb60b8",
+    "name": "Contract Testing",
+    "description": "# About this collection\n\nThis collection helps you set up contract tests to ensure that two separate systems are compatible and can communicate with one another.\n\n## **Using the collection**\n\n**Step 1:** Send the sample requests and view the response and test results.\n\n**Step 2:** Replace the sample request URLs with your desired API endpoints.\n\n**Step 3:** Customize the tests in the \"Tests\" tab if needed. Don't forget to save your changes.\n\n### Resources\n\n[Scripting in Postman](https://learning.postman.com/docs/writing-scripts/intro-to-scripts/)\n\n[Test script examples](https://learning.postman.com/docs/writing-scripts/script-references/test-examples/)\n\n[Postman Sandbox API reference](https://learning.postman.com/docs/sending-requests/grpc/postman-sandbox-api/#writing-assertions)\n\n[Using the Collection Runner](https://learning.postman.com/docs/collections/running-collections/intro-to-collection-runs/)\n\n[  \n](https://postman.postman.co/documentation/24552533-5bead607-0197-4e1d-87d4-3160bc7631c1?entity=&branch=&version=)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "2940421"
+  },
+  "item": [
+    {
+      "name": "DataContract",
+      "item": [
+        {
+          "name": "https://app.xautrendlab.com/_api/trend/opportunities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let j = pm.response.json();\r",
+                  "pm.test(\"rows exist\", () => {\r",
+                  "    pm.expect(j.rows).to.be.an(\"array\").that.is.not.empty;\r",
+                  "});\r",
+                  "\r",
+                  "let row = j.rows[0];\r",
+                  "\r",
+                  "// -------- Find bars in a tolerant way (because shapes differ) --------\r",
+                  "let bars =\r",
+                  "    (row.chart && row.chart.bars) ||\r",
+                  "    (row.bars) ||\r",
+                  "    (row.entry_gate && row.entry_gate.bars) ||\r",
+                  "    null;\r",
+                  "\r",
+                  "pm.test(\"bars exist\", () => {\r",
+                  "    pm.expect(bars).to.be.an(\"array\").that.is.not.empty;\r",
+                  "});\r",
+                  "\r",
+                  "// ---- Basic bar shape + monotonic time + OHLC sanity ----\r",
+                  "pm.test(\"bars have valid OHLC + increasing time\", () => {\r",
+                  "    pm.expect(bars.length).to.be.greaterThan(50);\r",
+                  "\r",
+                  "    let prevT = null;\r",
+                  "    for (let i = 0; i < Math.min(bars.length, 200); i++) {\r",
+                  "        let b = bars[i];\r",
+                  "\r",
+                  "        // time can be 't' (seconds) OR 'ts_ms' (ms)\r",
+                  "        let tms = null;\r",
+                  "        if (b.ts_ms != null) tms = Number(b.ts_ms);\r",
+                  "        else if (b.t != null) tms = Number(b.t) * 1000;\r",
+                  "\r",
+                  "        pm.expect(tms, `bar[${i}].time`).to.be.a(\"number\");\r",
+                  "\r",
+                  "        let o = Number(b.o), h = Number(b.h), l = Number(b.l), c = Number(b.c);\r",
+                  "        pm.expect(o).to.be.a(\"number\");\r",
+                  "        pm.expect(h).to.be.a(\"number\");\r",
+                  "        pm.expect(l).to.be.a(\"number\");\r",
+                  "        pm.expect(c).to.be.a(\"number\");\r",
+                  "\r",
+                  "        pm.expect(l, `bar[${i}] low<=high`).to.be.at.most(h);\r",
+                  "\r",
+                  "        let mn = Math.min(o, c);\r",
+                  "        let mx = Math.max(o, c);\r",
+                  "        pm.expect(l, `bar[${i}] low<=body`).to.be.at.most(mn);\r",
+                  "        pm.expect(h, `bar[${i}] high>=body`).to.be.at.least(mx);\r",
+                  "\r",
+                  "        if (prevT != null) pm.expect(tms, `bar[${i}] time increasing`).to.be.above(prevT);\r",
+                  "        prevT = tms;\r",
+                  "    }\r",
+                  "});\r",
+                  "\r",
+                  "// -------- lastClosedTs validation --------\r",
+                  "// Prefer dbg_lastClosedTs (what you were using)\r",
+                  "let lastClosedTs = row.entry_gate && row.entry_gate.dbg_lastClosedTs != null\r",
+                  "    ? Number(row.entry_gate.dbg_lastClosedTs)\r",
+                  "    : (row.lastClosedTs != null ? Number(row.lastClosedTs) : null);\r",
+                  "\r",
+                  "pm.test(\"lastClosedTs exists\", () => {\r",
+                  "    pm.expect(lastClosedTs).to.be.a(\"number\");\r",
+                  "});\r",
+                  "\r",
+                  "// Infer last closed from bars: last bar start + tf_ms (H1 = 3600000)\r",
+                  "const tf = (row.tf || \"H1\").toUpperCase();\r",
+                  "const tf_ms = (tf === \"H1\") ? 3600000 : (tf === \"M15\" ? 900000 : null);\r",
+                  "\r",
+                  "pm.test(\"TF supported for lastClosed check\", () => {\r",
+                  "    pm.expect(tf_ms).to.not.equal(null);\r",
+                  "});\r",
+                  "\r",
+                  "pm.test(\"lastClosedTs equals last bar close boundary\", () => {\r",
+                  "    // last bar start time\r",
+                  "    let bLast = bars[bars.length - 1];\r",
+                  "    let t0 = (bLast.ts_ms != null) ? Number(bLast.ts_ms) : Number(bLast.t) * 1000;\r",
+                  "\r",
+                  "    let expectedClose = t0 + tf_ms;\r",
+                  "\r",
+                  "    // Some feeds include forming bar at end; if so, take second last bar\r",
+                  "    // If lastClosedTs != expectedClose, try bars[-2]\r",
+                  "    if (lastClosedTs !== expectedClose && bars.length >= 2) {\r",
+                  "        let b2 = bars[bars.length - 2];\r",
+                  "        let t2 = (b2.ts_ms != null) ? Number(b2.ts_ms) : Number(b2.t) * 1000;\r",
+                  "        let expected2 = t2 + tf_ms;\r",
+                  "        pm.expect(lastClosedTs, \"lastClosedTs matches last closed bar\").to.equal(expected2);\r",
+                  "    } else {\r",
+                  "        pm.expect(lastClosedTs, \"lastClosedTs matches last closed bar\").to.equal(expectedClose);\r",
+                  "    }\r",
+                  "});\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Device-Id",
+                "value": "{{dev}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://app.xautrendlab.com/_api/trend/opportunities?tf=H1&symbols={{symbols}}&debug_gate=1",
+              "protocol": "https",
+              "host": [
+                "app",
+                "xautrendlab",
+                "com"
+              ],
+              "path": [
+                "_api",
+                "trend",
+                "opportunities"
+              ],
+              "query": [
+                {
+                  "key": "tf",
+                  "value": "H1"
+                },
+                {
+                  "key": "symbols",
+                  "value": "{{symbols}}"
+                },
+                {
+                  "key": "debug_gate",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://app.xautrendlab.com/_api/auth/login",
+              "protocol": "https",
+              "host": [
+                "app",
+                "xautrendlab",
+                "com"
+              ],
+              "path": [
+                "_api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "APIContract",
+      "item": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://postman-echo.com"
+    }
+  ]
+}
