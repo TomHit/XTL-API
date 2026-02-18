@@ -34,18 +34,43 @@ jobs:
           node ./gen_totp.js "$TOTP_SECRET_BASE32" > /tmp/totp.txt
           echo "totp=$(cat /tmp/totp.txt)" >> $GITHUB_ENV
 
-      - name: Run Newman
+      # ------------------------------------------------------------
+      # 1) One-time endpoints (run once)
+      # ------------------------------------------------------------
+      - name: Run Newman (one-time endpoints)
         run: |
           mkdir -p artifacts
           newman run "./Contract Testing.postman_collection.json" \
             -e "./XTL.postman_environment.json" \
+            --folder "DataContract" \
+            --iteration-count 1 \
             --env-var "BASE_URL=$BASE_URL" \
             --env-var "USERNAME_OR_EMAIL=$USERNAME_OR_EMAIL" \
             --env-var "PASSWORD=$PASSWORD" \
             --env-var "totp=$totp" \
             --reporters cli,htmlextra,junit \
-            --reporter-htmlextra-export "artifacts/newman-report.html" \
-            --reporter-junit-export "artifacts/newman-junit.xml"
+            --reporter-htmlextra-export "artifacts/newman-once-report.html" \
+            --reporter-junit-export "artifacts/newman-once-junit.xml" \
+            --suppress-exit-code
+
+      # ------------------------------------------------------------
+      # 2) Loop endpoint (run 5 symbols -> 5 iterations)
+      # ------------------------------------------------------------
+      - name: Run Newman (loop 5 symbols)
+        run: |
+          newman run "./Contract Testing.postman_collection.json" \
+            -e "./XTL.postman_environment.json" \
+            --folder "APIContract" \
+            --iteration-count 5 \
+            --env-var "symbols_csv=EURUSD,GBPUSD,USDJPY,USDCHF,XAUUSD" \
+            --env-var "BASE_URL=$BASE_URL" \
+            --env-var "USERNAME_OR_EMAIL=$USERNAME_OR_EMAIL" \
+            --env-var "PASSWORD=$PASSWORD" \
+            --env-var "totp=$totp" \
+            --reporters cli,htmlextra,junit \
+            --reporter-htmlextra-export "artifacts/newman-loop-report.html" \
+            --reporter-junit-export "artifacts/newman-loop-junit.xml" \
+            --suppress-exit-code
 
       - name: Upload artifacts
         if: always()
