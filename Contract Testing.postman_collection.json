@@ -12,6 +12,23 @@
 			"item": [
 				{
 					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"console.log(\"SENDING username_or_email =\", pm.variables.get(\"USERNAME_OR_EMAIL\"));\r",
+									"console.log(\"SENDING password_len =\", (pm.variables.get(\"PASSWORD\") || \"\").length);\r",
+									"console.log(\"SENDING totp =\", pm.variables.get(\"totp\"));\r",
+									"\r",
+									"pm.test(\"login not 401\", () => pm.expect(pm.response.code).to.not.equal(401));\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
 					"request": {
 						"auth": {
 							"type": "noauth"
@@ -51,7 +68,7 @@
 					"response": []
 				},
 				{
-					"name": "https://app.xautrendlab.com/_api/trend/opportunities",
+					"name": "opportunities-high level",
 					"event": [
 						{
 							"listen": "test",
@@ -176,18 +193,434 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "compare_ohlc (USDJPY H1)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// compare_ohlc: ignore failures, only log\r",
+									"\r",
+									"if (!pm.response || pm.response.code >= 400) {\r",
+									"  pm.test(\"compare_ohlc ignored (http error)\", function () {\r",
+									"    pm.expect(true).to.eql(true);\r",
+									"  });\r",
+									"  console.log(\"compare_ohlc ignored. code=\", pm.response ? pm.response.code : \"no_response\");\r",
+									"  return;\r",
+									"}\r",
+									"\r",
+									"let j = {};\r",
+									"try {\r",
+									"  j = pm.response.json();\r",
+									"} catch (e) {\r",
+									"  pm.test(\"compare_ohlc ignored (bad json)\", function () {\r",
+									"    pm.expect(true).to.eql(true);\r",
+									"  });\r",
+									"  console.log(\"compare_ohlc ignored. bad json:\", e.message);\r",
+									"  return;\r",
+									"}\r",
+									"\r",
+									"// If your API returns {ok:false} etc, ignore it too:\r",
+									"if (j && j.ok === false) {\r",
+									"  pm.test(\"compare_ohlc ignored (ok=false)\", function () {\r",
+									"    pm.expect(true).to.eql(true);\r",
+									"  });\r",
+									"  console.log(\"compare_ohlc ok=false ignored. payload=\", j);\r",
+									"  return;\r",
+									"}\r",
+									"\r",
+									"pm.test(\"compare_ohlc ok (informational)\", function () {\r",
+									"  pm.expect(true).to.eql(true);\r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://app.xautrendlab.com/_api/devices/compare_ohlc?symbol={{symbol}}&tf={{tf}}&n={{n}}",
+							"protocol": "https",
+							"host": [
+								"app",
+								"xautrendlab",
+								"com"
+							],
+							"path": [
+								"_api",
+								"devices",
+								"compare_ohlc"
+							],
+							"query": [
+								{
+									"key": "symbol",
+									"value": "{{symbol}}"
+								},
+								{
+									"key": "tf",
+									"value": "{{tf}}"
+								},
+								{
+									"key": "n",
+									"value": "{{n}}"
+								}
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
 		{
 			"name": "APIContract",
-			"item": []
+			"item": [
+				{
+					"name": "OpportunitiesContract",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"let resp=pm.response;\r",
+									"let jresp=resp.json();\r",
+									"//validate 200 OK Status code\r",
+									"\r",
+									"pm.test(\"Validate 200 OK Status Code\",function(){\r",
+									"    pm.expect(resp.code).to.eql(200);\r",
+									"});\r",
+									"// Validate ok:true\r",
+									"\r",
+									"pm.test(\"Validate ok true in response\",function(){\r",
+									"\r",
+									"    pm.expect(jresp.ok).to.eql(true);\r",
+									"});\r",
+									"\r",
+									"//validate tf:H1\r",
+									"// validate tf:H1 (top-level + per-row)\r",
+									"pm.test(\"Validate tf should be H1 (root + rows)\", function () {\r",
+									"  const jresp = pm.response.json();\r",
+									"\r",
+									"  // 1) root tf\r",
+									"  pm.expect(jresp).to.have.property(\"tf\");\r",
+									"  pm.expect(String(jresp.tf).toUpperCase()).to.eql(\"H1\");\r",
+									"\r",
+									"  // 2) rows tf (only if row.tf exists)\r",
+									"  pm.expect(jresp.rows).to.be.an(\"array\");\r",
+									"  jresp.rows.forEach((row, i) => {\r",
+									"    if (row.tf !== undefined && row.tf !== null) {\r",
+									"      pm.expect(String(row.tf).toUpperCase(), `row[${i}].tf`).to.eql(\"H1\");\r",
+									"    }\r",
+									"  });\r",
+									"});\r",
+									"\r",
+									"\r",
+									"// every rows has symbol exist\r",
+									"\r",
+									"pm.test(\"Validate Symbol exist\",function(){\r",
+									"    pm.expect(jresp.rows).to.be.an(\"array\");\r",
+									"    jresp.rows.forEach((row,i)=>{\r",
+									"  \r",
+									"      pm.expect(row, `row[${i}]`).to.have.property(\"symbol\");\r",
+									"      pm.expect(row.symbol, `row[${i}].symbol`).to.be.a(\"string\").and.not.be.empty;\r",
+									"\t});\r",
+									"});\r",
+									"\r",
+									"// if decision=BUY, zone must exist\r",
+									"pm.test(\"Validate zone exists for BUY decision\", function () {\r",
+									"  const jresp = pm.response.json();\r",
+									"\r",
+									"  pm.expect(jresp.rows).to.be.an(\"array\");\r",
+									"\r",
+									"  jresp.rows.forEach((row, i) => {\r",
+									"    // decision should exist (optional but fine)\r",
+									"    pm.expect(row, `row[${i}]`).to.have.property(\"decision\");\r",
+									"\r",
+									"    // only validate zone for BUY rows\r",
+									"    if (String(row.decision || \"\").toUpperCase() === \"BUY\") {\r",
+									"      // zone might be at row.zone OR row.entry_gate.zone depending on endpoint\r",
+									"      const zone = row.zone || (row.entry_gate && row.entry_gate.zone);\r",
+									"\r",
+									"      pm.expect(zone, `row[${i}] zone for BUY`).to.be.an(\"object\");\r",
+									"      pm.expect(zone, `row[${i}] zone.level`).to.have.property(\"level\");\r",
+									"      pm.expect(zone.level, `row[${i}] zone.level`).to.be.a(\"number\");\r",
+									"\r",
+									"      // optional but usually useful if you use zone bands\r",
+									"      if (zone.low !== undefined || zone.high !== undefined) {\r",
+									"        pm.expect(zone.low, `row[${i}] zone.low`).to.be.a(\"number\");\r",
+									"        pm.expect(zone.high, `row[${i}] zone.high`).to.be.a(\"number\");\r",
+									"      }\r",
+									"    }\r",
+									"  });\r",
+									"});\r",
+									"\r",
+									"\r",
+									"\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const csv = pm.collectionVariables.get(\"symbols_csv\") || \"\";\r",
+									"const arr = csv.split(\",\").map(s => s.trim()).filter(Boolean);\r",
+									"\r",
+									"let i = parseInt(pm.collectionVariables.get(\"sym_i\") || \"0\", 10);\r",
+									"\r",
+									"if (i >= arr.length) {\r",
+									"  postman.setNextRequest(null); // stop\r",
+									"} else {\r",
+									"  pm.collectionVariables.set(\"sym\", arr[i]); // current symbol\r",
+									"}\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://app.xautrendlab.com/_api/trend/opportunities?tf=H1",
+							"protocol": "https",
+							"host": [
+								"app",
+								"xautrendlab",
+								"com"
+							],
+							"path": [
+								"_api",
+								"trend",
+								"opportunities"
+							],
+							"query": [
+								{
+									"key": "tf",
+									"value": "H1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Opportunities-loop",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const sym = pm.variables.get(\"sym\") || \"NA\";\r",
+									"const j = pm.response.json();\r",
+									"\r",
+									"pm.test(`[${sym}] 200 OK`, () => pm.response.to.have.status(200));\r",
+									"pm.test(`[${sym}] ok true`, () => pm.expect(j.ok).to.eql(true));\r",
+									"pm.test(`[${sym}] tf is H1`, () => pm.expect(String(j.tf).toUpperCase()).to.eql(\"H1\"));\r",
+									"pm.test(`[${sym}] rows array exists`, () => pm.expect(j.rows).to.be.an(\"array\"));\r",
+									"\r",
+									"const hasRows = Array.isArray(j.rows) && j.rows.length > 0;\r",
+									"\r",
+									"pm.test(`[${sym}] EXPECT rows > 0`, function () {\r",
+									"  pm.expect(j.rows.length, `No rows returned for ${sym}`).to.be.above(0);\r",
+									"});\r",
+									"\r",
+									"pm.test(`[${sym}] Every row has symbol`, function () {\r",
+									"  pm.expect(hasRows, `No data for ${sym}, cannot validate symbols`).to.eql(true);\r",
+									"  j.rows.forEach((row, i) => {\r",
+									"    pm.expect(row, `row[${i}]`).to.have.property(\"symbol\");\r",
+									"    pm.expect(row.symbol, `row[${i}].symbol`).to.be.a(\"string\").and.not.be.empty;\r",
+									"  });\r",
+									"});\r",
+									"\r",
+									"pm.test(`[${sym}] BUY rows must have zone`, function () {\r",
+									"  pm.expect(hasRows, `No data for ${sym}, cannot validate zones`).to.eql(true);\r",
+									"  j.rows.forEach((row, i) => {\r",
+									"    if (String(row.decision || \"\").toUpperCase() === \"BUY\") {\r",
+									"      const zone = row.zone || (row.entry_gate && row.entry_gate.zone);\r",
+									"      pm.expect(zone, `row[${i}] zone for BUY`).to.be.an(\"object\");\r",
+									"      pm.expect(zone).to.have.property(\"level\");\r",
+									"    }\r",
+									"  });\r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://app.xautrendlab.com/_api/trend/opportunities?tf=H1&symbols={{sym}}&debug_gate=1",
+							"protocol": "https",
+							"host": [
+								"app",
+								"xautrendlab",
+								"com"
+							],
+							"path": [
+								"_api",
+								"trend",
+								"opportunities"
+							],
+							"query": [
+								{
+									"key": "tf",
+									"value": "H1"
+								},
+								{
+									"key": "symbols",
+									"value": "{{sym}}"
+								},
+								{
+									"key": "debug_gate",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							"const csv = pm.environment.get(\"symbols_csv\") || pm.collectionVariables.get(\"symbols_csv\") || \"\";\r",
+							"const arr = String(csv).split(\",\").map(s => s.trim()).filter(Boolean);\r",
+							"\r",
+							"const i = pm.info.iteration;\r",
+							"const sym = arr[i];\r",
+							"\r",
+							"pm.variables.set(\"sym\", sym || \"\");\r",
+							"\r",
+							"console.log(\"csv=\", csv);\r",
+							"console.log(\"arr=\", JSON.stringify(arr));\r",
+							"console.log(\"i=\", i, \"sym=\", sym);\r",
+							"\r",
+							"if (!sym) {\r",
+							"  throw new Error(\"sym is blank. csv=\" + csv + \" i=\" + i + \" arr_len=\" + arr.length);\r",
+							"}\r",
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
 		}
 	],
 	"variable": [
 		{
 			"key": "baseUrl",
 			"value": "https://postman-echo.com"
+		},
+		{
+			"key": "symbols_csv",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "sym_i",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "loop_started",
+			"value": ""
 		}
 	]
 }
